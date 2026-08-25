@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisRelief | Mission-Critical Disaster Command & Emergency Aid Hub</title>
+  <meta name="description" content="State-of-the-art real-time disaster relief command system featuring live incident maps, one-tap SOS dispatch, shelter logistics, missing person finder, and offline emergency survival protocols.">
+  
+  <!-- PWA Manifest & Mobile Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AegisRelief">
+  
+  <!-- Supabase JS CDN Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Custom Design System -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- 1. TOP TACTICAL ALERT HEADER -->
+    <header class="tactical-header">
+      <div class="brand-section">
+        <div class="brand-logo">
+          <i class="fas fa-shield-halved"></i>
+        </div>
+        <div class="brand-title-group">
+          <h1>
+            AEGIS RELIEF
+            <span class="defcon-pill" id="header-defcon">
+              <span class="status-dot"></span> <span id="header-alert-level">CRITICAL / EVAC LEVEL 3</span>
+            </span>
+          </h1>
+          <div class="brand-subtitle" id="header-location-name">Metro Coastal Basin & Delta Zone</div>
+        </div>
+      </div>
+
+      <!-- Live Center Weather & Telemetry -->
+      <div class="telemetry-center">
+        <div class="telemetry-item" id="network-status-indicator" title="Network Connection Status">
+          <i class="fas fa-signal" id="network-status-icon" style="color: var(--emerald-500);"></i>
+          <span id="network-status-text">ONLINE</span>
+        </div>
+        <div class="telemetry-item" title="Current Wind Speed">
+          <i class="fas fa-wind"></i>
+          <span>WIND: <strong id="telemetry-wind">85 km/h</strong></span>
+        </div>
+        <div class="telemetry-item" title="24h Precipitation">
+          <i class="fas fa-cloud-showers-heavy"></i>
+          <span>RAIN: <strong id="telemetry-rain">245 mm</strong></span>
+        </div>
+        <div class="telemetry-item" title="Flood Inundation Probability">
+          <i class="fas fa-water"></i>
+          <span>SURGE RISK: <strong id="telemetry-risk">94%</strong></span>
+        </div>
+      </div>
+
+      <!-- Header Scenario & Action Controls -->
+      <div class="header-actions">
+        <button class="btn-secondary btn-sm" id="btn-open-supabase-modal" title="Configure Live Supabase Cloud Sync">
+          <i class="fas fa-bolt" style="color: #10B981;"></i> <span id="supabase-status-label">Cloud: Local</span>
+        </button>
+        <button class="btn-secondary btn-sm" id="btn-install-pwa" style="display: none;" title="Install AegisRelief App to Home Screen">
+          <i class="fas fa-download"></i> <span>Install App</span>
+        </button>
+        <select class="select-scenario" id="scenario-selector" aria-label="Select Disaster Scenario">
+          <option value="flash_flood">🌊 Cyclone & Flash Flood (Coastal)</option>
+          <option value="earthquake">🌋 M7.2 Seismic Event (Inland)</option>
+          <option value="wildfire">🔥 Wildfire Complex (Ridge)</option>
+        </select>
+
+        <button class="btn-icon-tactical" id="btn-toggle-siren" title="Toggle Emergency Siren Simulator" aria-label="Toggle Siren">
+          <i class="fas fa-bullhorn"></i>
+        </button>
+        <button class="btn-icon-tactical" id="btn-toggle-sound" title="Mute/Unmute Tactical Audio FX" aria-label="Toggle Audio">
+          <i class="fas fa-volume-up"></i>
+        </button>
+
+        <button class="btn-header-sos" id="btn-header-sos">
+          <i class="fas fa-satellite-dish"></i> ONE-TAP SOS
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. LIVE EMERGENCY BROADCAST TICKER -->
+    <div class="emergency-ticker">
+      <div class="ticker-label">
+        <i class="fas fa-broadcast-tower"></i> LIVE ALERTS
+      </div>
+      <div class="ticker-marquee-wrap">
+        <div class="ticker-content" id="ticker-content-stream">
+          <!-- Populated dynamically by JS -->
+          <span><i class="fas fa-exclamation-triangle"></i> RESERVOIR GATES 3 & 4 OPENED AT 100% CAPACITY. EVACUATE DELTA ZONE.</span>
+          <span><i class="fas fa-ambulance"></i> 14 MOBILE RESCUE TRIAGE UNITS DEPLOYED ALONG WESTERN HIGHWAY.</span>
+          <span><i class="fas fa-campground"></i> CITY ARENA MEGA-SHELTER AT 82% CAPACITY. BACKUP GENERATORS ONLINE.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. METRICS OVERVIEW STRIP -->
+    <div class="metrics-strip">
+      <div class="metric-card">
+        <div class="metric-icon-box red"><i class="fas fa-exclamation-circle"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-active-incidents">5</div>
+          <div class="metric-label">Active Incidents</div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon-box orange"><i class="fas fa-ambulance"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-critical-count">3</div>
+          <div class="metric-label">Critical Rescues</div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon-box green"><i class="fas fa-bed"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-sheltered">1,954</div>
+          <div class="metric-label">People Sheltered</div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon-box cyan"><i class="fas fa-user-check"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-safe-checkins">128</div>
+          <div class="metric-label">Safe Check-Ins</div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon-box blue"><i class="fas fa-hands-helping"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-volunteers">97</div>
+          <div class="metric-label">Active Responders</div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon-box purple"><i class="fas fa-hand-holding-heart"></i></div>
+        <div class="metric-info">
+          <div class="metric-value" id="stat-donations">$148.5K</div>
+          <div class="metric-label">Relief Fund Pledged</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. NAVIGATION TAB BAR -->
+    <nav class="main-nav-bar">
+      <ul class="tab-list">
+        <li>
+          <button class="tab-btn active" data-tab="map">
+            <i class="fas fa-map-location-dot"></i> <span>Incident Map & Safe Routes</span>
+          </button>
+        </li>
+        <li>
+          <button class="tab-btn tab-sos" data-tab="sos">
+            <i class="fas fa-satellite-dish"></i> <span>Emergency SOS Beacon</span>
+          </button>
+        </li>
+        <li>
+          <button class="tab-btn" data-tab="shelters">
+            <i class="fas fa-campground"></i> <span>Shelters & Supply Matrix</span>
+          </button>
+        </li>
+        <li>
+          <button class="tab-btn" data-tab="missing">
+            <i class="fas fa-magnifying-glass-location"></i> <span>Family Reunification & Safe</span>
+          </button>
+        </li>
+        <li>
+          <button class="tab-btn" data-tab="volunteers">
+            <i class="fas fa-users-viewfinder"></i> <span>Volunteer & Mutual Aid</span>
+          </button>
+        </li>
+        <li>
+          <button class="tab-btn" data-tab="guides">
+            <i class="fas fa-kit-medical"></i> <span>Go-Bag & Survival Protocols</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="nav-actions">
+        <button class="btn-report-incident" id="btn-open-incident-modal">
+          <i class="fas fa-plus-circle"></i> Report Hazard
+        </button>
+        <button class="btn-checkin-safe" id="btn-open-safe-modal">
+          <i class="fas fa-check-circle"></i> I Am Safe
+        </button>
+      </div>
+    </nav>
+
+    <!-- 5. TAB VIEW PANES -->
+    <main class="workspace-content">
+
+      <!-- ====================================================================
+           TAB 1: LIVE INCIDENT MAP & EVACUATION
+           ==================================================================== -->
+      <section class="tab-pane active" id="tab-map">
+        <!-- Sidebar Incident Feed -->
+        <aside class="map-sidebar">
+          <div class="sidebar-header">
+            <div class="sidebar-title">
+              <i class="fas fa-list-check text-cyan"></i> Live Situational Feed
+            </div>
+            <span class="badge-critical" id="sidebar-incident-count">5 Active</span>
+          </div>
+
+          <!-- Category Filter Pills -->
+          <div class="filter-pills-bar">
+            <button class="filter-chip active" data-filter="all">All Layers</button>
+            <button class="filter-chip" data-filter="medical">🚑 Medical</button>
+            <button class="filter-chip" data-filter="rescue">🛟 Rescue</button>
+            <button class="filter-chip" data-filter="hazard">⚠️ Hazards</button>
+            <button class="filter-chip" data-filter="shelters">🏠 Shelters</button>
+            <button class="filter-chip" data-filter="resources">📦 Depots</button>
+          </div>
+
+          <!-- Incident Cards List -->
+          <div class="incident-feed-list" id="incident-feed-list">
+            <!-- Rendered by JS -->
+          </div>
+        </aside>
+
+        <!-- Leaflet Map Container -->
+        <div class="map-view-wrapper">
+          <div id="disaster-map"></div>
+
+          <!-- Floating Map Legend Overlay -->
+          <div class="map-floating-overlay">
+            <div class="map-legend">
+              <div class="legend-item"><span class="legend-color red"></span> Critical SOS</div>
+              <div class="legend-item"><span class="legend-color orange"></span> High Alert</div>
+              <div class="legend-item"><span class="legend-color green"></span> Open Shelter</div>
+              <div class="legend-item"><span class="legend-color blue"></span> Supply Depot</div>
+            </div>
+            <button class="btn-secondary btn-sm" id="btn-clear-routes" title="Clear current navigation route">
+              <i class="fas fa-xmark"></i> Clear Route
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 2: ONE-TAP SOS EMERGENCY DISPATCH BEACON
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-sos">
+        <div class="sos-command-layout">
+          <!-- Distress Trigger Card -->
+          <div class="sos-trigger-card">
+            <span class="badge-critical">CRITICAL DISPATCH CHANNEL 911-S</span>
+            
+            <button class="sos-big-beacon-button pulsing" id="sos-beacon-button">
+              SOS
+              <span>BROADCAST DISTRESS</span>
+            </button>
+
+            <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 480px;">
+              Pressing the SOS button transmits your high-precision coordinates, calculates triage score, alerts emergency civil defense units, and triggers a localized audio beacon.
+            </p>
+
+            <!-- Voice SOS Hands-Free Widget -->
+            <div class="voice-sos-trigger-wrap">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <button type="button" class="btn-voice-sos" id="btn-voice-sos">
+                  <i class="fas fa-microphone"></i> <span id="voice-btn-text">Speak Emergency (Hands-Free)</span>
+                </button>
+                <div class="voice-wave-container" id="voice-wave-container">
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                </div>
+              </div>
+              <div class="voice-transcript-bubble" id="voice-transcript-bubble">Listening for emergency conditions...</div>
+            </div>
+
+            <form class="sos-form-grid" id="sos-dispatch-form">
+              <div class="form-group">
+                <label class="form-label">Emergency Category</label>
+                <select class="form-control" id="sos-type" required>
+                  <option value="medical">🚑 Critical Medical / Trauma</option>
+                  <option value="trapped">🏢 Trapped / Structural Failure</option>
+                  <option value="flood">🌊 Rising Water / Rooftop Stranded</option>
+                  <option value="fire">🔥 Wildfire / Toxic Smoke</option>
+                  <option value="supplies">🍼 Infant / Dehydration Emergency</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Number of People in Peril</label>
+                <input type="number" class="form-control" id="sos-count" min="1" value="1" required>
+              </div>
+
+              <div class="form-group full">
+                <label class="form-label">Current Address or Landmarks</label>
+                <input type="text" class="form-control" id="sos-address" placeholder="e.g. 44 Riverbank Rd, 2nd floor balcony or Near Water Tower" value="Riverbank Sector 4 Delta Zone">
+              </div>
+
+              <div class="form-group full">
+                <label class="form-label">Critical Situational Conditions</label>
+                <div class="checkbox-group">
+                  <label class="checkbox-pill"><input type="checkbox" id="sos-infants"> 👶 Infants Present</label>
+                  <label class="checkbox-pill"><input type="checkbox" id="sos-elderly" checked> 👴 Elderly / Disabled</label>
+                  <label class="checkbox-pill"><input type="checkbox" id="sos-injured" checked> 🩹 Severe Bleeding / Trauma</label>
+                  <label class="checkbox-pill"><input type="checkbox" id="sos-rising-water" checked> 🌊 Water Rising Rapidly</label>
+                  <label class="checkbox-pill"><input type="checkbox" id="sos-power-loss"> ⚡ Zero Power / Oxygen needed</label>
+                </div>
+              </div>
+
+              <div class="form-group full">
+                <label class="form-label">Urgent Notes for Responders</label>
+                <input type="text" class="form-control" id="sos-notes" placeholder="e.g. Inflatable boat required. Water level at 1.2m and rising.">
+              </div>
+
+              <div class="form-group full" style="margin-top: 10px;">
+                <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 1rem; background: linear-gradient(135deg, var(--crimson-500), #991B1B);">
+                  <i class="fas fa-tower-broadcast"></i> TRANSMIT EMERGENCY BEACON NOW
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Low-Bandwidth & Offline Survival Card -->
+          <div class="sos-offline-card">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <h3 style="font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;">
+                <i class="fas fa-qrcode text-cyan"></i> Offline Distress Code
+              </h3>
+              <span class="badge-info">Zero Internet Protocol</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted);">
+              When cell towers are congested or down, display this encrypted QR code to rescue drone cameras or emergency ground responders, or send the SMS format via standard 2G carrier text.
+            </p>
+
+            <div class="qr-preview-box">
+              <canvas id="sos-qr-canvas" width="180" height="180"></canvas>
+              <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);" id="qr-id-display">BEACON-ID: SOS-88219</span>
+            </div>
+
+            <div>
+              <label class="form-label">Encrypted 2G SMS Dispatch String (Copy & Send to 112/911):</label>
+              <div class="sms-string-box" id="sms-code-preview">AEGIS#SOS-88219#13.0880,80.2760#MED#4P#Boat_Required</div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+              <button class="strobe-tool-btn" id="btn-start-strobe" style="flex: 1;">
+                <i class="fas fa-bolt"></i> Screen Strobe Beacon
+              </button>
+              <button class="btn-secondary" id="btn-play-morse" style="flex: 1;">
+                <i class="fas fa-volume-high"></i> Morse Audio SOS
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 3: SHELTERS & SUPPLY LOGISTICS MATRIX
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-shelters">
+        <div class="section-hero-title">
+          <div>
+            <h2><i class="fas fa-campground text-cyan"></i> Emergency Shelters Network</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted);">Real-time capacity, medical services, pet accommodations, and relief supply levels.</p>
+          </div>
+          <button class="btn-primary" id="btn-refresh-shelters"><i class="fas fa-rotate"></i> Refresh Telemetry</button>
+        </div>
+
+        <div class="shelters-grid" id="shelters-grid-container">
+          <!-- Rendered by JS -->
+        </div>
+
+        <div class="section-hero-title" style="margin-top: 18px;">
+          <div>
+            <h2><i class="fas fa-boxes-stacked text-cyan"></i> Strategic Relief Supply Depots</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted);">Stockpiles of clean drinking water, MRE meal kits, trauma packs, generators, and zodiac boats.</p>
+          </div>
+        </div>
+
+        <div class="resources-grid" id="resources-grid-container">
+          <!-- Rendered by JS -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 4: MISSING PERSONS & "I AM SAFE" REGISTRY
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-missing">
+        <div class="section-hero-title">
+          <div>
+            <h2><i class="fas fa-person-circle-question text-cyan"></i> Family Reunification Registry</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted);">Search for displaced relatives, broadcast personal safety status, or report missing individuals.</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-checkin-safe" id="btn-open-safe-modal-2"><i class="fas fa-user-check"></i> Broadcast "I Am Safe"</button>
+            <button class="btn-primary" id="btn-open-missing-modal"><i class="fas fa-user-plus"></i> Report Missing Person</button>
+          </div>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="search-filter-bar">
+          <div class="search-input-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" class="form-control" id="search-missing-input" placeholder="Search by full name, age, last seen location, or description...">
+          </div>
+          <select class="form-control" id="filter-missing-status" style="width: 200px;">
+            <option value="all">All Statuses</option>
+            <option value="searching">⚠️ Search in Progress</option>
+            <option value="safe">✅ Found Safe / Reunited</option>
+          </select>
+        </div>
+
+        <div class="missing-persons-grid" id="missing-persons-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 5: VOLUNTEER & DONATION MUTUAL AID
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-volunteers">
+        <!-- Donation Fundraiser Card -->
+        <div class="donation-banner-card">
+          <div style="max-width: 600px;">
+            <span class="badge-info">VERIFIED DISASTER RELIEF FUND</span>
+            <h2 style="font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: #fff; margin: 6px 0;">
+              Emergency Aid Fund: <span style="color: var(--emerald-500);" id="fund-total-display">$148,500</span> Raised
+            </h2>
+            <p style="font-size: 0.82rem; color: #CBD5E1;">
+              100% of proceeds go directly to potable water supply, medical air drops, rescue boat fuel, and emergency shelter bedding.
+            </p>
+            <div style="margin-top: 10px;" class="occupancy-track">
+              <div class="occupancy-fill fill-green" style="width: 74%;"></div>
+            </div>
+          </div>
+          <button class="btn-primary" id="btn-open-donate-modal" style="padding: 12px 24px; font-size: 1rem; background: linear-gradient(135deg, var(--emerald-500), #059669);">
+            <i class="fas fa-heart"></i> Make Aid Pledge
+          </button>
+        </div>
+
+        <div class="section-hero-title">
+          <div>
+            <h2><i class="fas fa-users-gear text-cyan"></i> Volunteer Deployment Roster</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted);">Join specialized emergency response squads. Immediate onboarding for certified responders.</p>
+          </div>
+        </div>
+
+        <div class="volunteer-squads-grid" id="volunteer-squads-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 6: GO-BAG CHECKLIST & FIRST AID PROTOCOLS
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-guides">
+        <div class="guides-split-layout">
+          <!-- Interactive Go-Bag Checklist -->
+          <div class="guide-accordion-card">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <h3 style="font-family: var(--font-display); font-size: 1.15rem; font-weight: 700;">
+                <i class="fas fa-backpack text-cyan"></i> 72-Hour Emergency Go-Bag
+              </h3>
+              <span class="badge-success" id="gobag-progress-badge">6/12 Packed</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+              Essential items required for rapid household evacuation. Checks are saved automatically to your device.
+            </p>
+
+            <div class="gobag-list" id="gobag-items-list">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Offline First Aid & Survival Action Cards -->
+          <div>
+            <h3 style="font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; margin-bottom: 12px;">
+              <i class="fas fa-book-medical text-cyan"></i> Critical Survival Action Protocols
+            </h3>
+            <div id="guides-accordion-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ====================================================================
+         MODALS & DIALOGS
+         ==================================================================== -->
+
+    <!-- Modal 1: Report Incident -->
+    <div class="modal-backdrop" id="modal-report-incident">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fas fa-exclamation-triangle text-crimson"></i> Report Hazard or Emergency</div>
+          <button class="btn-modal-close" data-close="modal-report-incident">&times;</button>
+        </div>
+        <form id="form-report-incident">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Incident Title</label>
+              <input type="text" class="form-control" id="rep-title" placeholder="e.g. Submerged Bridge / Roof Trap" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-control" id="rep-category" required>
+                <option value="medical">🚑 Medical Emergency</option>
+                <option value="rescue">🛟 Trapped Citizen / Boat Needed</option>
+                <option value="hazard">⚠️ Electrical / Gas / Fire Hazard</option>
+                <option value="supplies">🍼 Critical Water / Food Need</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Severity Level</label>
+              <select class="form-control" id="rep-severity" required>
+                <option value="critical">🔴 Critical (Immediate Threat to Life)</option>
+                <option value="high">🟠 High (Evacuation Blocked)</option>
+                <option value="medium">🔵 Medium (Assistance Required)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Address or Coordinates</label>
+              <input type="text" class="form-control" id="rep-address" placeholder="e.g. 14 South Delta Ave or Click on map" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description & Special Access Notes</label>
+              <textarea class="form-control" id="rep-desc" rows="3" placeholder="Provide details on water depth, injuries, number of people..." required></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Estimated People Affected</label>
+              <input type="number" class="form-control" id="rep-victims" value="1" min="0">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-close="modal-report-incident">Cancel</button>
+            <button type="submit" class="btn-primary" style="background: var(--crimson-500);"><i class="fas fa-paper-plane"></i> Submit Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 2: "I Am Safe" Check-In -->
+    <div class="modal-backdrop" id="modal-safe-checkin">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fas fa-user-check text-emerald"></i> Safety Status Broadcast</div>
+          <button class="btn-modal-close" data-close="modal-safe-checkin">&times;</button>
+        </div>
+        <form id="form-safe-checkin">
+          <div class="modal-body">
+            <p style="font-size: 0.8rem; color: var(--text-muted);">
+              Broadcasting your safety lets family members, friends, and rescue coordinators know you are accounted for.
+            </p>
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" class="form-control" id="safe-name" placeholder="e.g. Sarah Jenkins" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Current Safe Location / Shelter</label>
+              <input type="text" class="form-control" id="safe-location" placeholder="e.g. Central Civic Arena Shelter or Relatives in East District" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Emergency Contact / Phone Number</label>
+              <input type="text" class="form-control" id="safe-contact" placeholder="e.g. +1 (555) 234-5678" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Message / Notes to Family</label>
+              <textarea class="form-control" id="safe-notes" rows="2" placeholder="e.g. We are safe and have food/water. Phone battery low."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-close="modal-safe-checkin">Cancel</button>
+            <button type="submit" class="btn-primary" style="background: var(--emerald-500);"><i class="fas fa-check"></i> Broadcast Safety</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 3: Report Missing Person -->
+    <div class="modal-backdrop" id="modal-missing-person">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fas fa-person-circle-question text-cyan"></i> Report Missing Person</div>
+          <button class="btn-modal-close" data-close="modal-missing-person">&times;</button>
+        </div>
+        <form id="form-missing-person">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Missing Person's Full Name</label>
+              <input type="text" class="form-control" id="miss-name" placeholder="e.g. David Walker" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Age & Gender</label>
+              <input type="text" class="form-control" id="miss-age" placeholder="e.g. 45, Male" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Known Location</label>
+              <input type="text" class="form-control" id="miss-location" placeholder="e.g. Riverbank Market Sector 4" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Physical Description & Clothing</label>
+              <textarea class="form-control" id="miss-desc" rows="2" placeholder="e.g. Blue raincoat, black cap, red backpack..." required></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Your Contact Information</label>
+              <input type="text" class="form-control" id="miss-contact" placeholder="e.g. Jane Walker (Wife) - +1 (555) 304-9821" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-close="modal-missing-person">Cancel</button>
+            <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Register Missing Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 4: Donate to Relief Fund -->
+    <div class="modal-backdrop" id="modal-donate">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fas fa-hand-holding-heart text-emerald"></i> Emergency Relief Aid Pledge</div>
+          <button class="btn-modal-close" data-close="modal-donate">&times;</button>
+        </div>
+        <form id="form-donate">
+          <div class="modal-body">
+            <p style="font-size: 0.82rem; color: var(--text-muted);">
+              Your contribution directly provisions emergency clean water, rescue fuel, baby formula, and trauma packs for this active disaster.
+            </p>
+            <div class="form-group">
+              <label class="form-label">Select Pledge Amount</label>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px;">
+                <button type="button" class="btn-secondary btn-donate-preset" data-amount="25">$25</button>
+                <button type="button" class="btn-secondary btn-donate-preset" data-amount="50">$50</button>
+                <button type="button" class="btn-secondary btn-donate-preset" data-amount="100">$100</button>
+                <button type="button" class="btn-secondary btn-donate-preset" data-amount="250">$250</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Custom Amount (USD)</label>
+              <input type="number" class="form-control" id="donate-amount" value="50" min="5" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Donor Name (or 'Anonymous')</label>
+              <input type="text" class="form-control" id="donate-name" value="Community Supporter" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-close="modal-donate">Cancel</button>
+            <button type="submit" class="btn-primary" style="background: var(--emerald-500);"><i class="fas fa-check"></i> Complete Aid Pledge</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 5: Supabase Cloud Database Sync -->
+    <div class="modal-backdrop" id="modal-supabase-config">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fas fa-database text-cyan"></i> Supabase Cloud Sync Settings</div>
+          <button class="btn-modal-close" data-close="modal-supabase-config">&times;</button>
+        </div>
+        <form id="form-supabase-config">
+          <div class="modal-body">
+            <p style="font-size: 0.8rem; color: var(--text-muted);">
+              Connect your Supabase PostgreSQL project to enable live multi-responder real-time WebSocket syncing for incidents, SOS beacons, shelters, and missing persons.
+            </p>
+
+            <div class="form-group">
+              <label class="form-label">Supabase Project URL</label>
+              <input type="url" class="form-control" id="sb-input-url" placeholder="https://your-project.supabase.co" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Supabase Anon Public API Key</label>
+              <input type="password" class="form-control" id="sb-input-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." required>
+            </div>
+
+            <div style="background: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; font-size: 0.76rem; color: #CBD5E1;">
+              <strong>📋 Need the Database Schema?</strong>
+              <p style="margin-top: 4px; color: var(--text-muted);">
+                Run the included <code style="color: var(--cyan-400);">schema.sql</code> script in your Supabase SQL Editor to initialize tables, realtime publications, and RLS policies.
+              </p>
+              <a href="schema.sql" download class="btn-secondary btn-sm" style="margin-top: 8px; text-decoration: none; display: inline-flex;">
+                <i class="fas fa-file-code"></i> Download schema.sql
+              </a>
+            </div>
+
+            <div id="sb-connection-status-box" style="display: none; padding: 10px; border-radius: var(--radius-sm); font-size: 0.78rem;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="btn-disconnect-supabase" style="color: var(--crimson-500);">Disconnect</button>
+            <button type="button" class="btn-secondary" data-close="modal-supabase-config">Cancel</button>
+            <button type="submit" class="btn-primary" id="btn-save-supabase"><i class="fas fa-plug"></i> Test & Connect</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Application Scripts -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
